@@ -103,7 +103,7 @@ float player_z = 0.5;
 bool w_key, s_key, a_key, d_key;
 
 float speed = 0.1;
-float look_speed = 0.01;
+float look_speed = 0.005;
 
 void player_movement(){
     if(w_key){
@@ -115,12 +115,12 @@ void player_movement(){
         player_y -= cos(player_direction) * speed;
     }
     if(a_key){
-        player_x += cos(player_direction) * speed;
-        player_y += sin(player_direction) * speed;
+        player_x += cos(-player_direction) * speed;
+        player_y += sin(-player_direction) * speed;
     }
     if(d_key){
-        player_x -= cos(player_direction) * speed;
-        player_y -= sin(player_direction) * speed;
+        player_x -= cos(-player_direction) * speed;
+        player_y -= sin(-player_direction) * speed;
     }
 
     if(player_direction > PI){
@@ -130,9 +130,12 @@ void player_movement(){
     if(player_direction < -PI){
         player_direction += 2 * PI;
     }
+
+    player_y_direction = SDL_clamp(player_y_direction, -PI, PI);
 }
 
-#define FOV 1.22173
+//FOV is in theta
+#define FOV 1
 #define pixels_per_theta ((screenx / 2) / FOV)
 
 void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, float x_length, float y_depth, float z_height){
@@ -224,16 +227,15 @@ int main(int argc, char* argv[]) {
             if (event.type == SDL_MOUSEMOTION) {
                 // Get the x-coordinate of mouse movement
                 int mouseX = event.motion.xrel;
+                int mouseY = event.motion.yrel;
 
                 // Clamp the mouse to the center of the screen
                 SDL_WarpMouseInWindow(window, screenx / 2, screeny / 2);
 
                 // Update player_direction based on mouseX
-                if (mouseX < 0) {
-                    player_direction -= look_speed; // Move left
-                } else if(mouseX > 0){
-                    player_direction += look_speed; // Move right
-                }
+                player_direction += mouseX * look_speed;
+                // Update player_direction based on mouseX
+                player_y_direction += mouseY * look_speed;
             }
         }
 
@@ -253,6 +255,12 @@ int main(int argc, char* argv[]) {
             player_movement();
 
             render_wall(prevent_zero(0 - player_x), prevent_zero(10 - player_y), 0 - player_z, 1, 1, 1);
+
+            int x = player_x + screenx / 2;
+            int y = player_y + screeny / 2;
+            draw_box_filled(x, y, 0xFFFF0000, 10, 10);
+            draw_line(x, y, x + (sin(player_direction) * 20), y + (cos(player_direction) * 20), 0xFFFF0000);
+            draw_line(x, y, x + (cos(-player_direction) * 20), y + (sin(-player_direction) * 20), 0xFFFFFF00);
         }
         // Update the screen
         SDL_RenderPresent(renderer);
