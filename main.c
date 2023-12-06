@@ -167,6 +167,14 @@ void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, flo
               (player_direction - x_angle_ul) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ul) * pixels_per_theta + screeny / 2, 0xFF00FFFF);
 }
 
+void player_debug(){
+    int x = player_x + screenx / 2;
+    int y = player_y + screeny / 2;
+    draw_box_filled(x, y, 0xFFFF0000, 10, 10);
+    draw_line(x, y, x + (sin(player_direction) * 20), y + (cos(player_direction) * 20), 0xFFFF0000);
+    draw_line(x, y, x + (cos(-player_direction) * 20), y + (sin(-player_direction) * 20), 0xFFFFFF00);
+}
+
 int main(int argc, char* argv[]) {
 
     SDL_Init(SDL_INIT_VIDEO);
@@ -255,12 +263,6 @@ int main(int argc, char* argv[]) {
             player_movement();
 
             render_wall(prevent_zero(0 - player_x), prevent_zero(10 - player_y), 0 - player_z, 1, 1, 1);
-
-            int x = player_x + screenx / 2;
-            int y = player_y + screeny / 2;
-            draw_box_filled(x, y, 0xFFFF0000, 10, 10);
-            draw_line(x, y, x + (sin(player_direction) * 20), y + (cos(player_direction) * 20), 0xFFFF0000);
-            draw_line(x, y, x + (cos(-player_direction) * 20), y + (sin(-player_direction) * 20), 0xFFFFFF00);
         }
         // Update the screen
         SDL_RenderPresent(renderer);
