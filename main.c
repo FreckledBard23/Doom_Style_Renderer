@@ -135,11 +135,33 @@ void player_movement(){
 #define FOV 1.22173
 #define pixels_per_theta ((screenx / 2) / FOV)
 
-void render_wall(float x, float y, float z){
-    float x_angle = atan(x / y);
-    float y_angle = atan(z / y);
+void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, float x_length, float y_depth, float z_height){
+    float x_angle_ll = atan(lower_left_x / lower_left_y);
+    float y_angle_ll = atan(lower_left_z / lower_left_y);
 
-    setPixel(0xFF00FFFF, (player_direction - x_angle) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle) * pixels_per_theta + screeny / 2);
+    float x_angle_lr = atan((lower_left_x + x_length) / (lower_left_y + y_depth));
+    float y_angle_lr = atan(lower_left_z / (lower_left_y + y_depth));
+
+    float x_angle_ul = atan(lower_left_x / lower_left_y);
+    float y_angle_ul = atan((lower_left_z + z_height) / lower_left_y);
+
+    float x_angle_ur = atan((lower_left_x + x_length) / (lower_left_y + y_depth));
+    float y_angle_ur = atan((lower_left_z + z_height) / (lower_left_y + y_depth));
+
+    draw_line((player_direction - x_angle_ll) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ll) * pixels_per_theta + screeny / 2, 
+              (player_direction - x_angle_lr) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_lr) * pixels_per_theta + screeny / 2, 0xFF00FFFF);
+
+    draw_line((player_direction - x_angle_lr) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_lr) * pixels_per_theta + screeny / 2, 
+              (player_direction - x_angle_ur) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ur) * pixels_per_theta + screeny / 2, 0xFF00FFFF);
+
+    draw_line((player_direction - x_angle_ur) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ur) * pixels_per_theta + screeny / 2, 
+              (player_direction - x_angle_ul) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ul) * pixels_per_theta + screeny / 2, 0xFF00FFFF);
+            
+    draw_line((player_direction - x_angle_ul) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ul) * pixels_per_theta + screeny / 2, 
+              (player_direction - x_angle_ll) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ll) * pixels_per_theta + screeny / 2, 0xFF00FFFF);
+
+    draw_line((player_direction - x_angle_lr) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_lr) * pixels_per_theta + screeny / 2, 
+              (player_direction - x_angle_ul) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ul) * pixels_per_theta + screeny / 2, 0xFF00FFFF);
 }
 
 int main(int argc, char* argv[]) {
@@ -230,8 +252,7 @@ int main(int argc, char* argv[]) {
             clear_screen(0xFF303030);
             player_movement();
 
-            render_wall(prevent_zero(0 - player_x), prevent_zero(10 - player_y), 0 - player_z);
-            render_wall(prevent_zero(0 - player_x), prevent_zero(11 - player_y), 0 - player_z);
+            render_wall(prevent_zero(0 - player_x), prevent_zero(10 - player_y), 0 - player_z, 1, 1, 1);
         }
         // Update the screen
         SDL_RenderPresent(renderer);
