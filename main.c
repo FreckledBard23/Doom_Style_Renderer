@@ -95,9 +95,10 @@ float prevent_zero(float a){
 }
 
 float player_direction = 0;
+float player_y_direction = 0;
 float player_x = 0;
 float player_y = 0;
-float player_z = 0;
+float player_z = 0.5;
 
 bool w_key, s_key, a_key, d_key;
 
@@ -172,8 +173,9 @@ void render_walls(){
 
 void render_wall(float x, float y, float z){
     float x_angle = atan(x / y);
+    float y_angle = atan(z / y);
 
-    setPixel(0xFF00FFFF, (player_direction - x_angle) * pixels_per_theta + screenx / 2, screeny / 2);
+    setPixel(0xFF00FFFF, (player_direction - x_angle) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle) * pixels_per_theta + screeny / 2);
 }
 
 int main(int argc, char* argv[]) {
@@ -264,7 +266,8 @@ int main(int argc, char* argv[]) {
             clear_screen(0xFF303030);
             player_movement();
 
-            render_wall(prevent_zero(0 - player_x), prevent_zero(10 - player_y), 0);
+            render_wall(prevent_zero(0 - player_x), prevent_zero(10 - player_y), 0 - player_z);
+            render_wall(prevent_zero(0 - player_x), prevent_zero(11 - player_y), 0 - player_z);
         }
         // Update the screen
         SDL_RenderPresent(renderer);
