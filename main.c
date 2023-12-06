@@ -132,42 +132,6 @@ void player_movement(){
     }
 }
 
-void render_walls(){
-    int wx[4];
-    int wy[4];
-    int wz[4];
-
-    float player_cos = prevent_zero(cos(player_direction)); float player_sin = prevent_zero(sin(player_direction));
-
-    //-----offset bottom 2 points by player-----
-    int x1 = 40 - player_x; int y1 = 10 - player_y;
-    int x2 = 40 - player_x; int y2 = 290 - player_y;
-
-    //world x position
-    wx[0] = x1 * player_cos - y1 * player_sin;
-    wx[1] = x2 * player_cos - y2 * player_sin;
-
-    //world y position
-    wy[0] = y1 * player_cos + x1 * player_sin;
-    wy[1] = y2 * player_cos + x2 * player_sin;
-
-    //world z position
-    wz[0] = 0 - player_z;
-    wz[1] = 0 - player_z;
-
-    //-----convert x and y of first 2 points into screen x and y-----
-    int fov = 30;
-    wx[0] = prevent_zero(wx[0]); wx[1] = prevent_zero(wx[0]);
-    wy[0] = prevent_zero(wy[0]); wy[1] = prevent_zero(wy[0]);
-    wx[0] = wx[0] * fov / wy[0] + (screenx / 2);
-    wy[0] = wz[0] * fov / wy[0] + (screeny / 2);
-    wx[1] = wx[1] * fov / wy[1] + (screenx / 2);
-    wy[1] = wz[1] * fov / wy[1] + (screeny / 2);
-
-    setPixel(0xFF00FFFF, wx[0], wy[0]);
-    setPixel(0xFF00FFFF, wx[1], wy[1]);
-}
-
 #define FOV 1.22173
 #define pixels_per_theta ((screenx / 2) / FOV)
 
