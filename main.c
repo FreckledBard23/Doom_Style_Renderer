@@ -258,10 +258,14 @@ int main(int argc, char* argv[]) {
             clear_screen(0xFF303030);
             player_movement();
 
-            player_debug();
+            int wall_x = -5;
+            int wall_y = 1;
+            int wall_z = 0;
+            int wall_dx = 10;
+            int wall_dy = 0;
+            int wall_dz = 1;
 
-            render_wall(prevent_zero(0 - player_x), prevent_zero(0 - player_y), 0 - player_z, 10, 0, 1);
-            draw_line(0 + screenx / 2, 0 + screeny / 2, 0 + 10 + screenx / 2, 0 + 0 + screeny / 2, 0xFF00FF00);
+            render_wall(wall_x - player_x, wall_y - player_y, wall_z - player_z, wall_dx, wall_dy, wall_dz);
         }
         // Update the screen
         SDL_RenderPresent(renderer);
