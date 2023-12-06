@@ -50,10 +50,6 @@ void draw_line(int x1, int y1, int x2, int y2, uint32_t color) {
 
         x += xIncrement;
         y += yIncrement;
-
-        if(SDL_clamp(x, 0, screenx - 1) != x || SDL_clamp(y, 0, screeny - 1) != y) {
-            return;
-        }
     }
 }
 
@@ -262,7 +258,10 @@ int main(int argc, char* argv[]) {
             clear_screen(0xFF303030);
             player_movement();
 
-            render_wall(prevent_zero(0 - player_x), prevent_zero(10 - player_y), 0 - player_z, 1, 1, 1);
+            player_debug();
+
+            render_wall(prevent_zero(0 - player_x), prevent_zero(0 - player_y), 0 - player_z, 10, 0, 1);
+            draw_line(0 + screenx / 2, 0 + screeny / 2, 0 + 10 + screenx / 2, 0 + 0 + screeny / 2, 0xFF00FF00);
         }
         // Update the screen
         SDL_RenderPresent(renderer);
