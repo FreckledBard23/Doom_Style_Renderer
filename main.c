@@ -115,12 +115,12 @@ void player_movement(){
         player_y -= cos(player_direction) * speed;
     }
     if(a_key){
-        player_x -= cos(player_direction) * speed;
-        player_y -= sin(player_direction) * speed;
-    }
-    if(d_key){
         player_x += cos(player_direction) * speed;
         player_y += sin(player_direction) * speed;
+    }
+    if(d_key){
+        player_x -= cos(player_direction) * speed;
+        player_y -= sin(player_direction) * speed;
     }
 
     if(player_direction > PI){
