@@ -106,14 +106,12 @@ float look_speed = 0.01;
 
 void player_movement(){
     if(w_key){
-        //player_x += sin(player_direction) * speed;
-        //player_y += cos(player_direction) * speed;
-        player_y += speed;
+        player_x += sin(player_direction) * speed;
+        player_y += cos(player_direction) * speed;
     }
     if(s_key){
-        // player_x -= sin(player_direction) * speed;
-        // player_y -= cos(player_direction) * speed;
-        player_y -= speed;
+        player_x -= sin(player_direction) * speed;
+        player_y -= cos(player_direction) * speed;
     }
     if(a_key){
         player_x -= cos(player_direction) * speed;
