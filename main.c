@@ -157,12 +157,12 @@ void player_movement(){
         player_y -= cos(player_direction) * speed;
     }
     if(a_key){
-        player_x += cos(-player_direction) * speed;
-        player_y += sin(-player_direction) * speed;
-    }
-    if(d_key){
         player_x -= cos(-player_direction) * speed;
         player_y -= sin(-player_direction) * speed;
+    }
+    if(d_key){
+        player_x += cos(-player_direction) * speed;
+        player_y += sin(-player_direction) * speed;
     }
 
     if(player_direction > PI){
@@ -181,36 +181,14 @@ void player_movement(){
 #define pixels_per_theta ((screenx / 2) / FOV)
 
 void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, float x_length, float y_depth, float z_height){
-    if(lower_left_x * sin(player_direction) + lower_left_y * cos(player_direction) <= 0){
-        return;
-    }
+    float ll_x = lower_left_x * cos(player_direction) - lower_left_y * sin(player_direction);
+    float ll_y = lower_left_x * sin(player_direction) + lower_left_y * cos(player_direction);
 
-    float x_angle_ll = atan(lower_left_x / lower_left_y);
-    float y_angle_ll = atan(lower_left_z / lower_left_y);
+    float lr_x = (lower_left_x + x_length) * cos(player_direction) - (lower_left_y + y_depth) * sin(player_direction);
+    float lr_y = (lower_left_x + x_length) * sin(player_direction) + (lower_left_y + y_depth) * cos(player_direction);
 
-    float x_angle_lr = atan((lower_left_x + x_length) / (lower_left_y + y_depth));
-    float y_angle_lr = atan(lower_left_z / (lower_left_y + y_depth));
-
-    float x_angle_ul = atan(lower_left_x / lower_left_y);
-    float y_angle_ul = atan((lower_left_z + z_height) / lower_left_y);
-
-    float x_angle_ur = atan((lower_left_x + x_length) / (lower_left_y + y_depth));
-    float y_angle_ur = atan((lower_left_z + z_height) / (lower_left_y + y_depth));
-
-    draw_line((player_direction - x_angle_ll) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ll) * pixels_per_theta + screeny / 2, 
-              (player_direction - x_angle_lr) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_lr) * pixels_per_theta + screeny / 2, 0xFF00FFFF);
-
-    draw_line((player_direction - x_angle_lr) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_lr) * pixels_per_theta + screeny / 2, 
-              (player_direction - x_angle_ur) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ur) * pixels_per_theta + screeny / 2, 0xFF00FFFF);
-
-    draw_line((player_direction - x_angle_ur) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ur) * pixels_per_theta + screeny / 2, 
-              (player_direction - x_angle_ul) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ul) * pixels_per_theta + screeny / 2, 0xFF00FFFF);
-            
-    draw_line((player_direction - x_angle_ul) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ul) * pixels_per_theta + screeny / 2, 
-              (player_direction - x_angle_ll) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ll) * pixels_per_theta + screeny / 2, 0xFF00FFFF);
-
-    draw_line((player_direction - x_angle_lr) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_lr) * pixels_per_theta + screeny / 2, 
-              (player_direction - x_angle_ul) * pixels_per_theta + screenx / 2, (player_y_direction - y_angle_ul) * pixels_per_theta + screeny / 2, 0xFF00FFFF);
+    draw_line((ll_x * 1000) / ll_y + screenx / 2, screeny / 2 - (lower_left_z * 1000) / ll_y, 
+              (lr_x * 1000) / lr_y + screenx / 2, screeny / 2 - (lower_left_z * 1000) / lr_y, 0xFF00FFFF);
 }
 
 void player_debug(){
@@ -310,8 +288,11 @@ int main(int argc, char* argv[]) {
             clear_screen(0xFF303030);
             player_movement();
 
+            player_debug();
+
             for(int i = 0; i < numWalls; i++){
-                // printf("%f %f %f %f %f %f\n", wall_data[0].x, wall_data[0].y, wall_data[0].z, wall_data[0].length, wall_data[0].depth, wall_data[0].height);
+                            setPixel(0xFFFF0000, wall_data[i].x + screenx / 2, wall_data[i].y + screeny / 2);
+                //printf("%f %f %f %f %f %f\n", wall_data[0].x, wall_data[0].y, wall_data[0].z, wall_data[0].length, wall_data[0].depth, wall_data[0].height);
                 render_wall(wall_data[i].x - player_x, wall_data[i].y - player_y, wall_data[i].z - player_z, 
                             wall_data[i].length, wall_data[i].depth, wall_data[i].height);
             }
