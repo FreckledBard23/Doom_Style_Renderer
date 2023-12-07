@@ -25,9 +25,11 @@ void delay(float number_of_seconds)
 #define screenx 1920
 #define screeny 1080
 
+#define null_color 0x00000000
+
 Uint32 pixels[screenx * screeny];
 
-void draw_line(int x1, int y1, int x2, int y2, uint32_t color) {
+void draw_line(int x1, int y1, int x2, int y2, uint32_t color, bool only_null) {
     int dx = x2 - x1;
     int dy = y2 - y1;
     int steps = abs(dx) > abs(dy) ? abs(dx) : abs(dy);
@@ -44,8 +46,15 @@ void draw_line(int x1, int y1, int x2, int y2, uint32_t color) {
 
         // Check if the pixel coordinates are within the image bounds
         if (pixelX >= 0 && pixelX < screenx && pixelY >= 0 && pixelY < screeny) {
-            int index = pixelY * screenx + pixelX;
-            pixels[index] = color;
+            if(only_null){
+                int index = pixelY * screenx + pixelX;
+                if(pixels[index] == null_color){
+                    pixels[index] = color;
+                }
+            } else {
+                int index = pixelY * screenx + pixelX;
+                pixels[index] = color;
+            }
         }
 
         x += xIncrement;
@@ -56,6 +65,45 @@ void draw_line(int x1, int y1, int x2, int y2, uint32_t color) {
 void setPixel(Uint32 color, int x, int y){
     if(x >= 0 && x < screenx && y >= 0 && y < screeny){
         pixels[y * screenx + x] = color;
+    }
+}
+
+void draw_polygon(int ll_x, int ll_y, int lr_x, int lr_y, int ul_x, int ul_y, int ur_x, int ur_y, Uint32 color){
+    int l_dx = lr_x - ll_x;
+    int l_dy = lr_y - ll_y;
+    int l_steps = abs(l_dx) > abs(l_dy) ? abs(l_dx) : abs(l_dy);
+
+    float l_xIncrement = (float)l_dx / l_steps;
+    float l_yIncrement = (float)l_dy / l_steps;
+
+    float l_x = ll_x;
+    float l_y = ll_y;
+
+    int u_dx = ur_x - ul_x;
+    int u_dy = ur_y - ul_y;
+    int u_steps = abs(u_dx) > abs(u_dy) ? abs(u_dx) : abs(u_dy);
+
+    float u_xIncrement = (float)u_dx / u_steps;
+    float u_yIncrement = (float)u_dy / u_steps;
+
+    float u_x = ul_x;
+    float u_y = ul_y;
+
+    for (int i = 0; i <= l_steps; ++i) {
+        int l_pixelX = (int)l_x;
+        int l_pixelY = (int)l_x;
+
+        int u_pixelX = (int)u_x;
+        int u_pixelY = (int)u_x;
+
+        // Check if the pixel coordinates are within the image bounds
+        draw_line(SDL_clamp(l_x, 0, screenx), SDL_clamp(l_y, 0, screeny), SDL_clamp(u_x, 0, screenx), SDL_clamp(u_y, 0, screeny), color, true);
+
+        l_x += l_xIncrement;
+        l_y += l_yIncrement;
+
+        u_x += u_xIncrement;
+        u_y += u_yIncrement;
     }
 }
 
@@ -98,6 +146,7 @@ typedef struct {
     float length;
     float depth;
     float height;
+    Uint32 color;
 } Wall;
 
 int numWalls = 0;
@@ -123,8 +172,8 @@ Wall* loadWallData(Wall* walls) {
     for (int i = 0; i < numWalls; i++) {
         Wall wall;
 
-        int result = fscanf(file, "%f %f %f %f %f %f", &wall.x, &wall.y, &wall.z, &wall.length, &wall.depth, &wall.height);
-        if (result != 6) {
+        int result = fscanf(file, "%f %f %f %f %f %f %x", &wall.x, &wall.y, &wall.z, &wall.length, &wall.depth, &wall.height, &wall.color);
+        if (result != 7) {
             fprintf(stderr, "Error reading data from file\n");
             break;
         }
@@ -180,23 +229,46 @@ void player_movement(){
 #define FOV 1
 #define pixels_per_theta ((screenx / 2) / FOV)
 
-void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, float x_length, float y_depth, float z_height){
-    float ll_x = lower_left_x * cos(player_direction) - lower_left_y * sin(player_direction);
-    float ll_y = lower_left_x * sin(player_direction) + lower_left_y * cos(player_direction);
+void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, float x_length, float y_depth, float z_height, Uint32 color){
+    float rotated_ll_x = lower_left_x * cos(player_direction) - lower_left_y * sin(player_direction);
+    float rotated_ll_y = lower_left_x * sin(player_direction) + lower_left_y * cos(player_direction);
 
-    float lr_x = (lower_left_x + x_length) * cos(player_direction) - (lower_left_y + y_depth) * sin(player_direction);
-    float lr_y = (lower_left_x + x_length) * sin(player_direction) + (lower_left_y + y_depth) * cos(player_direction);
+    float rotated_lr_x = (lower_left_x + x_length) * cos(player_direction) - (lower_left_y + y_depth) * sin(player_direction);
+    float rotated_lr_y = (lower_left_x + x_length) * sin(player_direction) + (lower_left_y + y_depth) * cos(player_direction);
 
-    draw_line((ll_x * 1000) / ll_y + screenx / 2, screeny / 2 - (lower_left_z * 1000) / ll_y, 
-              (lr_x * 1000) / lr_y + screenx / 2, screeny / 2 - (lower_left_z * 1000) / lr_y, 0xFF00FFFF);
+    if(rotated_ll_y <= 0 || rotated_lr_y <= 0){
+        return;
+    }
+
+    float pixel_ll_x = (rotated_ll_x * 1000) / rotated_ll_y + screenx / 2;
+    float pixel_ll_y = screeny / 2 - (lower_left_z * 1000) / rotated_ll_y;
+
+    float pixel_lr_x = (rotated_lr_x * 1000) / rotated_lr_y + screenx / 2;
+    float pixel_lr_y = screeny / 2 - (lower_left_z * 1000) / rotated_lr_y;
+
+    float pixel_ul_x = (rotated_ll_x * 1000) / rotated_ll_y + screenx / 2;
+    float pixel_ul_y = screeny / 2 - ((lower_left_z + z_height) * 1000) / rotated_ll_y;
+
+    float pixel_ur_x = (rotated_lr_x * 1000) / rotated_lr_y + screenx / 2;
+    float pixel_ur_y = screeny / 2 - ((lower_left_z + z_height) * 1000) / rotated_lr_y;
+
+    // draw_line(pixel_ll_x, pixel_ll_y, pixel_lr_x, pixel_lr_y, color, false);
+    // draw_line(pixel_ul_x, pixel_ul_y, pixel_ur_x, pixel_ur_y, color, false);
+    // draw_line(pixel_ll_x, pixel_ll_y, pixel_ul_x, pixel_ul_y, color, false);
+    // draw_line(pixel_lr_x, pixel_lr_y, pixel_ur_x, pixel_ur_y, color, false);
+
+    draw_polygon(pixel_ll_x, pixel_ll_y,
+                 pixel_lr_x, pixel_lr_y,
+                 pixel_ul_x, pixel_ul_y,
+                 pixel_ur_x, pixel_ur_y, color);
 }
 
 void player_debug(){
     int x = player_x + screenx / 2;
     int y = player_y + screeny / 2;
     draw_box_filled(x, y, 0xFFFF0000, 10, 10);
-    draw_line(x, y, x + (sin(player_direction) * 20), y + (cos(player_direction) * 20), 0xFFFF0000);
-    draw_line(x, y, x + (cos(-player_direction) * 20), y + (sin(-player_direction) * 20), 0xFFFFFF00);
+    draw_line(x, y, x + (sin(player_direction) * 20), y + (cos(player_direction) * 20), 0xFFFF0000, false);
+    draw_line(x, y, x + (cos(-player_direction) * 20), y + (sin(-player_direction) * 20), 0xFFFFFF00, false);
 }
 
 int main(int argc, char* argv[]) {
@@ -285,16 +357,12 @@ int main(int argc, char* argv[]) {
         //ensure constant fps
         if(clock() % (1000 / fps) == 0){
             //----------Render code here----------//
-            clear_screen(0xFF303030);
+            clear_screen(null_color);
             player_movement();
 
-            player_debug();
-
             for(int i = 0; i < numWalls; i++){
-                            setPixel(0xFFFF0000, wall_data[i].x + screenx / 2, wall_data[i].y + screeny / 2);
-                //printf("%f %f %f %f %f %f\n", wall_data[0].x, wall_data[0].y, wall_data[0].z, wall_data[0].length, wall_data[0].depth, wall_data[0].height);
                 render_wall(wall_data[i].x - player_x, wall_data[i].y - player_y, wall_data[i].z - player_z, 
-                            wall_data[i].length, wall_data[i].depth, wall_data[i].height);
+                            wall_data[i].length, wall_data[i].depth, wall_data[i].height, wall_data[i].color);
             }
         }
         // Update the screen
