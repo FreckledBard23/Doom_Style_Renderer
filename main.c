@@ -90,6 +90,52 @@ float prevent_zero(float a){
     }
 }
 
+// Define a structure to represent wall data
+typedef struct {
+    float x;
+    float y;
+    float z;
+    float length;
+    float depth;
+    float height;
+} Wall;
+
+int numWalls = 0;
+const char* wall_filename = "wall_data.txt";
+
+Wall* loadWallData(Wall* walls) {
+    FILE* file = fopen(wall_filename, "r");
+    if (file == NULL) {
+        perror("Error opening file for reading");
+        return NULL;
+    }
+
+    // Read the number of walls from the first line
+    if (fscanf(file, "%d", &numWalls) != 1) {
+        fprintf(stderr, "Error reading the number of walls from file\n");
+        fclose(file);
+        return NULL;
+    }
+
+    // Allocate memory for the walls array
+    walls = malloc(numWalls * sizeof(Wall));
+
+    for (int i = 0; i < numWalls; i++) {
+        Wall wall;
+
+        int result = fscanf(file, "%f %f %f %f %f %f", &wall.x, &wall.y, &wall.z, &wall.length, &wall.depth, &wall.height);
+        if (result != 6) {
+            fprintf(stderr, "Error reading data from file\n");
+            break;
+        }
+
+        walls[i] = wall;
+    }
+    fclose(file);
+
+    return walls;
+}
+
 float player_direction = 0;
 float player_y_direction = 0;
 float player_x = 0;
@@ -135,6 +181,10 @@ void player_movement(){
 #define pixels_per_theta ((screenx / 2) / FOV)
 
 void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, float x_length, float y_depth, float z_height){
+    if(lower_left_x * sin(player_direction) + lower_left_y * cos(player_direction) <= 0){
+        return;
+    }
+
     float x_angle_ll = atan(lower_left_x / lower_left_y);
     float y_angle_ll = atan(lower_left_z / lower_left_y);
 
@@ -184,6 +234,8 @@ int main(int argc, char* argv[]) {
     bool quit = false;
 
     SDL_Event event;
+
+    Wall* wall_data = loadWallData(wall_data);
 
     float delta_time;
     while (!quit) {
@@ -258,14 +310,11 @@ int main(int argc, char* argv[]) {
             clear_screen(0xFF303030);
             player_movement();
 
-            int wall_x = -5;
-            int wall_y = 1;
-            int wall_z = 0;
-            int wall_dx = 10;
-            int wall_dy = 0;
-            int wall_dz = 1;
-
-            render_wall(wall_x - player_x, wall_y - player_y, wall_z - player_z, wall_dx, wall_dy, wall_dz);
+            for(int i = 0; i < numWalls; i++){
+                // printf("%f %f %f %f %f %f\n", wall_data[0].x, wall_data[0].y, wall_data[0].z, wall_data[0].length, wall_data[0].depth, wall_data[0].height);
+                render_wall(wall_data[i].x - player_x, wall_data[i].y - player_y, wall_data[i].z - player_z, 
+                            wall_data[i].length, wall_data[i].depth, wall_data[i].height);
+            }
         }
         // Update the screen
         SDL_RenderPresent(renderer);
