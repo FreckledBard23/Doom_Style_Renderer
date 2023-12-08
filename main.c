@@ -68,41 +68,43 @@ void setPixel(Uint32 color, int x, int y){
     }
 }
 
-void draw_polygon(int ll_x, int ll_y, int lr_x, int lr_y, int ul_x, int ul_y, int ur_x, int ur_y, Uint32 color){
+void draw_wall(int ll_x, int ll_y, int lr_x, int lr_y, int ul_y, int ur_y, Uint32 color){
     int l_dx = lr_x - ll_x;
     int l_dy = lr_y - ll_y;
-    int l_steps = abs(l_dx) > abs(l_dy) ? abs(l_dx) : abs(l_dy);
+    int steps = abs(l_dx) > abs(l_dy) ? abs(l_dx) : abs(l_dy);
 
-    float l_xIncrement = (float)l_dx / l_steps;
-    float l_yIncrement = (float)l_dy / l_steps;
+    float l_xIncrement = (float)l_dx / steps;
+    float l_yIncrement = (float)l_dy / steps;
 
     float l_x = ll_x;
     float l_y = ll_y;
 
-    int u_dx = ur_x - ul_x;
     int u_dy = ur_y - ul_y;
-    int u_steps = abs(u_dx) > abs(u_dy) ? abs(u_dx) : abs(u_dy);
 
-    float u_xIncrement = (float)u_dx / u_steps;
-    float u_yIncrement = (float)u_dy / u_steps;
+    float u_yIncrement = (float)u_dy / steps;
 
-    float u_x = ul_x;
     float u_y = ul_y;
 
-    for (int i = 0; i <= l_steps; ++i) {
-        int l_pixelX = (int)l_x;
-        int l_pixelY = (int)l_x;
+    for (int i = 0; i <= steps; ++i) {
+        int ly = SDL_clamp(l_y, 0, screeny);
+        int uy = SDL_clamp(u_y, 0, screeny);
 
-        int u_pixelX = (int)u_x;
-        int u_pixelY = (int)u_x;
+        int min, max;
+        if(ly < uy){
+            min = ly;
+            max = uy;
+        } else {
+            min = uy;
+            max = ly;
+        }
 
-        // Check if the pixel coordinates are within the image bounds
-        draw_line(SDL_clamp(l_x, 0, screenx), SDL_clamp(l_y, 0, screeny), SDL_clamp(u_x, 0, screenx), SDL_clamp(u_y, 0, screeny), color, true);
+        for(int j = min; j < max; j++){
+            setPixel(color, SDL_clamp(l_x, 0, screenx), j);
+        }
 
         l_x += l_xIncrement;
         l_y += l_yIncrement;
 
-        u_x += u_xIncrement;
         u_y += u_yIncrement;
     }
 }
@@ -187,8 +189,8 @@ Wall* loadWallData(Wall* walls) {
 
 float player_direction = 0;
 float player_y_direction = 0;
-float player_x = 0;
-float player_y = 0;
+float player_x = 4;
+float player_y = -5;
 float player_z = 0.5;
 
 bool w_key, s_key, a_key, d_key;
@@ -226,8 +228,7 @@ void player_movement(){
 }
 
 //FOV is in theta
-#define FOV 1
-#define pixels_per_theta ((screenx / 2) / FOV)
+#define focal_plane_depth 1000
 
 void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, float x_length, float y_depth, float z_height, Uint32 color){
     float rotated_ll_x = lower_left_x * cos(player_direction) - lower_left_y * sin(player_direction);
@@ -236,31 +237,19 @@ void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, flo
     float rotated_lr_x = (lower_left_x + x_length) * cos(player_direction) - (lower_left_y + y_depth) * sin(player_direction);
     float rotated_lr_y = (lower_left_x + x_length) * sin(player_direction) + (lower_left_y + y_depth) * cos(player_direction);
 
-    if(rotated_ll_y <= 0 || rotated_lr_y <= 0){
-        return;
-    }
+    float pixel_ll_x = (rotated_ll_x * focal_plane_depth) / rotated_ll_y + screenx / 2;
+    float pixel_ll_y = screeny / 2 - (lower_left_z * focal_plane_depth) / rotated_ll_y;
 
-    float pixel_ll_x = (rotated_ll_x * 1000) / rotated_ll_y + screenx / 2;
-    float pixel_ll_y = screeny / 2 - (lower_left_z * 1000) / rotated_ll_y;
+    float pixel_lr_x = (rotated_lr_x * focal_plane_depth) / rotated_lr_y + screenx / 2;
+    float pixel_lr_y = screeny / 2 - (lower_left_z * focal_plane_depth) / rotated_lr_y;
 
-    float pixel_lr_x = (rotated_lr_x * 1000) / rotated_lr_y + screenx / 2;
-    float pixel_lr_y = screeny / 2 - (lower_left_z * 1000) / rotated_lr_y;
+    float pixel_ul_y = screeny / 2 - ((lower_left_z + z_height) * focal_plane_depth) / rotated_ll_y;
 
-    float pixel_ul_x = (rotated_ll_x * 1000) / rotated_ll_y + screenx / 2;
-    float pixel_ul_y = screeny / 2 - ((lower_left_z + z_height) * 1000) / rotated_ll_y;
+    float pixel_ur_y = screeny / 2 - ((lower_left_z + z_height) * focal_plane_depth) / rotated_lr_y;
 
-    float pixel_ur_x = (rotated_lr_x * 1000) / rotated_lr_y + screenx / 2;
-    float pixel_ur_y = screeny / 2 - ((lower_left_z + z_height) * 1000) / rotated_lr_y;
-
-    // draw_line(pixel_ll_x, pixel_ll_y, pixel_lr_x, pixel_lr_y, color, false);
-    // draw_line(pixel_ul_x, pixel_ul_y, pixel_ur_x, pixel_ur_y, color, false);
-    // draw_line(pixel_ll_x, pixel_ll_y, pixel_ul_x, pixel_ul_y, color, false);
-    // draw_line(pixel_lr_x, pixel_lr_y, pixel_ur_x, pixel_ur_y, color, false);
-
-    draw_polygon(pixel_ll_x, pixel_ll_y,
-                 pixel_lr_x, pixel_lr_y,
-                 pixel_ul_x, pixel_ul_y,
-                 pixel_ur_x, pixel_ur_y, color);
+    draw_wall(pixel_ll_x, pixel_ll_y,
+              pixel_lr_x, pixel_lr_y,
+              pixel_ul_y, pixel_ur_y, color);
 }
 
 void player_debug(){
