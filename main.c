@@ -22,8 +22,8 @@ void delay(float number_of_seconds)
         ;
 }
 
-#define screenx 1920
-#define screeny 1080
+#define screenx 1000
+#define screeny 800
 
 #define null_color 0x00000000
 
@@ -227,6 +227,15 @@ void player_movement(){
     player_y_direction = SDL_clamp(player_y_direction, -PI, PI);
 }
 
+void prevent_y_behind_player(float *x1,float *y1, float x2,float y2)
+{
+    float y_distance = prevent_zero(y2 - *y1);
+    float scale_factor = y2 / y_distance;
+
+    *x1 = x2 - scale_factor * (x2 - (*x1));
+    *y1 = 2;
+}
+
 //FOV is in theta
 #define focal_plane_depth 1000
 
@@ -236,6 +245,18 @@ void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, flo
 
     float rotated_lr_x = (lower_left_x + x_length) * cos(player_direction) - (lower_left_y + y_depth) * sin(player_direction);
     float rotated_lr_y = (lower_left_x + x_length) * sin(player_direction) + (lower_left_y + y_depth) * cos(player_direction);
+
+    if(rotated_ll_y <= 0 && rotated_lr_y <= 0){
+        return;
+    }
+
+    if(rotated_ll_y <= 0){
+        prevent_y_behind_player(&rotated_ll_x, &rotated_ll_y, rotated_lr_x, rotated_lr_y);
+    }
+
+    if(rotated_lr_y <= 0){
+        prevent_y_behind_player(&rotated_lr_x, &rotated_lr_y, rotated_ll_x, rotated_ll_y);
+    }
 
     float pixel_ll_x = (rotated_ll_x * focal_plane_depth) / rotated_ll_y + screenx / 2;
     float pixel_ll_y = screeny / 2 - (lower_left_z * focal_plane_depth) / rotated_ll_y;
