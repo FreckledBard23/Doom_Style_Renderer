@@ -124,7 +124,7 @@ void draw_box_filled(int x, int y, Uint32 color, int xside, int yside){
     }
 }
 
-float distance(int x1, int y1, int x2, int y2){
+float distance(float x1, float y1, float x2, float y2){
     float a = abs(x1 - x2);
     float b = abs(y1 - y2);
     return sqrt(a * a + b * b);
@@ -144,12 +144,23 @@ float prevent_zero(float a){
 typedef struct {
     float x;
     float y;
-    float z;
     float length;
     float depth;
-    float height;
     Uint32 color;
+    float distance;
 } Wall;
+
+typedef struct
+{
+    int min_wall_index;
+    int max_wall_index;
+    float min_z;
+    float max_z;
+    float center_x;
+    float center_y;
+    float distance;
+} Sector;
+
 
 int numWalls = 0;
 const char* wall_filename = "wall_data.txt";
@@ -174,8 +185,8 @@ Wall* loadWallData(Wall* walls) {
     for (int i = 0; i < numWalls; i++) {
         Wall wall;
 
-        int result = fscanf(file, "%f %f %f %f %f %f %x", &wall.x, &wall.y, &wall.z, &wall.length, &wall.depth, &wall.height, &wall.color);
-        if (result != 7) {
+        int result = fscanf(file, "%f %f %f %f %x", &wall.x, &wall.y, &wall.length, &wall.depth, &wall.color);
+        if (result != 5) {
             fprintf(stderr, "Error reading data from file\n");
             break;
         }
@@ -187,9 +198,47 @@ Wall* loadWallData(Wall* walls) {
     return walls;
 }
 
+int numSectors = 0;
+const char* sector_filename = "sector_data.txt";
+
+Sector* loadSectorData(Sector* sectors) {
+    FILE* file = fopen(sector_filename, "r");
+    if (file == NULL) {
+        perror("Error opening file for reading");
+        return NULL;
+    }
+
+    // Read the number of walls from the first line
+    if (fscanf(file, "%d", &numSectors) != 1) {
+        fprintf(stderr, "Error reading the number of walls from file\n");
+        fclose(file);
+        return NULL;
+    }
+
+    // Allocate memory for the walls array
+    sectors = malloc(numSectors * sizeof(Sector));
+
+    for (int i = 0; i < numSectors; i++) {
+        Sector sector;
+
+        int result = fscanf(file, "%d %d %f %f %f %f", &sector.min_wall_index, &sector.max_wall_index,
+                                                       &sector.min_z,          &sector.max_z, 
+                                                       &sector.center_x,       &sector.center_y);
+        if (result != 6) {
+            fprintf(stderr, "Error reading data from file\n");
+            break;
+        }
+
+        sectors[i] = sector;
+    }
+    fclose(file);
+
+    return sectors;
+}
+
 float player_direction = 0;
 float player_y_direction = 0;
-float player_x = 4;
+float player_x = 0;
 float player_y = -5;
 float player_z = 0.5;
 
@@ -296,6 +345,7 @@ int main(int argc, char* argv[]) {
     SDL_Event event;
 
     Wall* wall_data = loadWallData(wall_data);
+    Sector* sector_data = loadSectorData(sector_data);
 
     float delta_time;
     while (!quit) {
@@ -370,9 +420,63 @@ int main(int argc, char* argv[]) {
             clear_screen(null_color);
             player_movement();
 
-            for(int i = 0; i < numWalls; i++){
-                render_wall(wall_data[i].x - player_x, wall_data[i].y - player_y, wall_data[i].z - player_z, 
-                            wall_data[i].length, wall_data[i].depth, wall_data[i].height, wall_data[i].color);
+            //sort all sectors based on distance
+            for(int sec = 0; sec < numSectors - 1; sec++){    
+                for(int w = 0; w < numSectors - sec - 1; w++){
+                    if(sector_data[w].distance < sector_data[w+1].distance){ 
+                        Sector stec = sector_data[w]; 
+                        sector_data[w] = sector_data[w+1];
+                        sector_data[w+1] = stec; 
+                    }
+                }
+            }
+
+
+            //loop through all sectors
+            for(int sec = 0; sec < numSectors; sec++){
+                sector_data[sec].distance = 0;
+
+                //sort walls inside sector
+                int walls_in_sector = ((sector_data[sec].max_wall_index - sector_data[sec].min_wall_index) + 1);
+
+                Wall sector_walls[walls_in_sector];
+
+                for(int i = 0; i < walls_in_sector; i++){
+                    sector_walls[i] = wall_data[sector_data[sec].min_wall_index + i];
+                    sector_walls[i].distance = distance(player_x, player_y, (sector_walls[i].x * 2 + sector_walls[i].length) / 2,
+                                                                            (sector_walls[i].y * 2 + sector_walls[i].depth)  / 2);
+
+                    printf("%f %x\n", sector_walls[i].distance, sector_walls[i].color);
+                }
+
+                for(int i = 0; i < walls_in_sector - 1; i++){    
+                    for(int w = 0; w < walls_in_sector - i - 1; w++){
+                        if(sector_walls[w].distance < sector_walls[w+1].distance){ 
+                            Wall wa = sector_walls[w]; 
+                            sector_walls[w] = sector_walls[w+1];
+                            sector_walls[w+1] = wa; 
+                        }
+                    }
+                }
+
+
+                
+                for (int wall = 0; wall < walls_in_sector; wall++)
+                {
+                    float start_x = sector_walls[wall].x - player_x;
+                    float start_y = sector_walls[wall].y - player_y;
+                    float start_z = sector_data[sec].min_z - player_z;
+                    float length = sector_walls[wall].length;
+                    float depth = sector_walls[wall].depth;
+                    float height = sector_data[sec].max_z;
+                    
+                    render_wall(start_x, start_y, start_z, 
+                                length,  depth,   height,  sector_walls[wall].color);
+                    
+                    sector_data[sec].distance += sector_walls[wall].distance;
+                }
+
+                sector_data[sec].distance = sector_data[sec].distance / walls_in_sector;
             }
         }
         // Update the screen
