@@ -29,117 +29,6 @@ void delay(float number_of_seconds)
 
 Uint32 pixels[screenx * screeny];
 
-void draw_line(int x1, int y1, int x2, int y2, uint32_t color, bool only_null) {
-    int dx = x2 - x1;
-    int dy = y2 - y1;
-    int steps = abs(dx) > abs(dy) ? abs(dx) : abs(dy);
-
-    float xIncrement = (float)dx / steps;
-    float yIncrement = (float)dy / steps;
-
-    float x = x1;
-    float y = y1;
-
-    for (int i = 0; i <= steps; ++i) {
-        int pixelX = (int)x;
-        int pixelY = (int)y;
-
-        // Check if the pixel coordinates are within the image bounds
-        if (pixelX >= 0 && pixelX < screenx && pixelY >= 0 && pixelY < screeny) {
-            if(only_null){
-                int index = pixelY * screenx + pixelX;
-                if(pixels[index] == null_color){
-                    pixels[index] = color;
-                }
-            } else {
-                int index = pixelY * screenx + pixelX;
-                pixels[index] = color;
-            }
-        }
-
-        x += xIncrement;
-        y += yIncrement;
-    }
-}
-
-void setPixel(Uint32 color, int x, int y){
-    if(x >= 0 && x < screenx && y >= 0 && y < screeny){
-        pixels[y * screenx + x] = color;
-    }
-}
-
-void draw_wall(int ll_x, int ll_y, int lr_x, int lr_y, int ul_y, int ur_y, Uint32 color){
-    int l_dx = lr_x - ll_x;
-    int l_dy = lr_y - ll_y;
-    int steps = abs(l_dx) > abs(l_dy) ? abs(l_dx) : abs(l_dy);
-
-    float l_xIncrement = (float)l_dx / steps;
-    float l_yIncrement = (float)l_dy / steps;
-
-    float l_x = ll_x;
-    float l_y = ll_y;
-
-    int u_dy = ur_y - ul_y;
-
-    float u_yIncrement = (float)u_dy / steps;
-
-    float u_y = ul_y;
-
-    for (int i = 0; i <= steps; ++i) {
-        int ly = SDL_clamp(l_y, 0, screeny);
-        int uy = SDL_clamp(u_y, 0, screeny);
-
-        int min, max;
-        if(ly < uy){
-            min = ly;
-            max = uy;
-        } else {
-            min = uy;
-            max = ly;
-        }
-
-        for(int j = min; j < max; j++){
-            setPixel(color, SDL_clamp(l_x, 0, screenx), j);
-        }
-
-        l_x += l_xIncrement;
-        l_y += l_yIncrement;
-
-        u_y += u_yIncrement;
-    }
-}
-
-void clear_screen(Uint32 color){
-    for(int i = 0; i < screeny * screenx; ++i){pixels[i] = color;}
-}
-
-void draw_box_filled(int x, int y, Uint32 color, int xside, int yside){
-    for(int xoff = -(xside / 2); xoff < xside / 2 + 1; ++xoff){
-        for(int yoff = (yside / 2) + 1; yoff > -(yside / 2); --yoff){ 
-            int newx = x + xoff;
-            int newy = y + yoff;
-            if(newx < screenx && newx > 0 && newy < screeny && newy > 0)
-                pixels[newy * screenx + newx] = color;
-        }
-    }
-}
-
-float distance(float x1, float y1, float x2, float y2){
-    float a = abs(x1 - x2);
-    float b = abs(y1 - y2);
-    return sqrt(a * a + b * b);
-}
-
-#define fps 120
-
-float prevent_zero(float a){
-    if(a == 0){
-        return a + 0.01;
-    } else {
-        return a;
-    }
-}
-
 // Define a structure to represent wall data
 typedef struct {
     float x;
@@ -150,17 +39,22 @@ typedef struct {
     float distance;
 } Wall;
 
+//struct for sectors
 typedef struct
 {
     int min_wall_index;
     int max_wall_index;
     float min_z;
     float max_z;
-    float center_x;
-    float center_y;
+    Uint32 bottom_col;
+    Uint32 top_col;
     float distance;
+    int surface;
+    int* surface_y;
 } Sector;
 
+Wall* wall_data;
+Sector* sector_data;
 
 int numWalls = 0;
 const char* wall_filename = "wall_data.txt";
@@ -221,19 +115,141 @@ Sector* loadSectorData(Sector* sectors) {
     for (int i = 0; i < numSectors; i++) {
         Sector sector;
 
-        int result = fscanf(file, "%d %d %f %f %f %f", &sector.min_wall_index, &sector.max_wall_index,
-                                                       &sector.min_z,          &sector.max_z, 
-                                                       &sector.center_x,       &sector.center_y);
+        int result = fscanf(file, "%d %d %f %f %x %x", &sector.min_wall_index,   &sector.max_wall_index,
+                                                       &sector.min_z,            &sector.max_z, 
+                                                       &sector.bottom_col,       &sector.top_col);
         if (result != 6) {
             fprintf(stderr, "Error reading data from file\n");
             break;
         }
+
+        sector.surface_y = malloc((screenx + 1) * sizeof(int));
 
         sectors[i] = sector;
     }
     fclose(file);
 
     return sectors;
+}
+
+void draw_line(int x1, int y1, int x2, int y2, uint32_t color, bool only_null) {
+    int dx = x2 - x1;
+    int dy = y2 - y1;
+    int steps = abs(dx) > abs(dy) ? abs(dx) : abs(dy);
+
+    float xIncrement = (float)dx / steps;
+    float yIncrement = (float)dy / steps;
+
+    float x = x1;
+    float y = y1;
+
+    for (int i = 0; i <= steps; ++i) {
+        int pixelX = (int)x;
+        int pixelY = (int)y;
+
+        // Check if the pixel coordinates are within the image bounds
+        if (pixelX >= 0 && pixelX < screenx && pixelY >= 0 && pixelY < screeny) {
+            if(only_null){
+                int index = pixelY * screenx + pixelX;
+                if(pixels[index] == null_color){
+                    pixels[index] = color;
+                }
+            } else {
+                int index = pixelY * screenx + pixelX;
+                pixels[index] = color;
+            }
+        }
+
+        x += xIncrement;
+        y += yIncrement;
+    }
+}
+
+void setPixel(Uint32 color, int x, int y){
+    if(x > 0 && x < screenx && y > 0 && y < screeny){
+        pixels[y * screenx + x] = color;
+    }
+}
+
+void draw_wall(int ll_x, int ll_y, int lr_x, int lr_y, int ul_y, int ur_y, Uint32 color, int sector_num){
+    int l_dx = lr_x - ll_x;
+    int l_dy = lr_y - ll_y;
+    int steps = abs(l_dx) > abs(l_dy) ? abs(l_dx) : abs(l_dy);
+
+    float l_xIncrement = (float)l_dx / steps;
+    float l_yIncrement = (float)l_dy / steps;
+
+    float l_x = ll_x;
+    float l_y = ll_y;
+
+    int u_dy = ur_y - ul_y;
+
+    float u_yIncrement = (float)u_dy / steps;
+
+    float u_y = ul_y;
+
+    for (int i = 0; i <= steps; ++i) {
+        int ly = SDL_clamp(l_y, 0, screeny);
+        int uy = SDL_clamp(u_y, 0, screeny);
+
+        int x = SDL_clamp((int)l_x, 0, screenx);
+
+        int min, max;
+        if(ly < uy){
+            min = ly;
+            max = uy;
+        } else {
+            min = uy;
+            max = ly;
+        }
+
+        for(int j = min; j < max; j++){
+            setPixel(color, x, j);
+        }
+
+        if(sector_data[sector_num].surface == 1) {sector_data[sector_num].surface_y[x] = max;}
+        if(sector_data[sector_num].surface == 2) {sector_data[sector_num].surface_y[x] = min;}
+        if(sector_data[sector_num].surface == -1) 
+            {for(int q = sector_data[sector_num].surface_y[x]; q > max; q--) {setPixel(sector_data[sector_num].bottom_col, x, q);}}
+        if(sector_data[sector_num].surface == -2) 
+            {for(int q = min; q > sector_data[sector_num].surface_y[x]; q--) {setPixel(sector_data[sector_num].top_col, x, q);}}
+
+        l_x += l_xIncrement;
+        l_y += l_yIncrement;
+
+        u_y += u_yIncrement;
+    }
+}
+
+void clear_screen(Uint32 color){
+    for(int i = 0; i < screeny * screenx; ++i){pixels[i] = color;}
+}
+
+void draw_box_filled(int x, int y, Uint32 color, int xside, int yside){
+    for(int xoff = -(xside / 2); xoff < xside / 2 + 1; ++xoff){
+        for(int yoff = (yside / 2) + 1; yoff > -(yside / 2); --yoff){ 
+            int newx = x + xoff;
+            int newy = y + yoff;
+            if(newx < screenx && newx > 0 && newy < screeny && newy > 0)
+                pixels[newy * screenx + newx] = color;
+        }
+    }
+}
+
+float distance(float x1, float y1, float x2, float y2){
+    float a = abs(x1 - x2);
+    float b = abs(y1 - y2);
+    return sqrt(a * a + b * b);
+}
+
+#define fps 120
+
+float prevent_zero(float a){
+    if(a == 0){
+        return a + 0.01;
+    } else {
+        return a;
+    }
 }
 
 float player_direction = 0;
@@ -288,7 +304,7 @@ void prevent_y_behind_player(float *x1,float *y1, float x2,float y2)
 //FOV is in theta
 #define focal_plane_depth 1000
 
-void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, float x_length, float y_depth, float z_height, Uint32 color){
+void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, float x_length, float y_depth, float z_height, Uint32 color, int sector_num){
     float rotated_ll_x = lower_left_x * cos(player_direction) - lower_left_y * sin(player_direction);
     float rotated_ll_y = lower_left_x * sin(player_direction) + lower_left_y * cos(player_direction);
 
@@ -319,7 +335,8 @@ void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, flo
 
     draw_wall(pixel_ll_x, pixel_ll_y,
               pixel_lr_x, pixel_lr_y,
-              pixel_ul_y, pixel_ur_y, color);
+              pixel_ul_y, pixel_ur_y, color, sector_num);
+
 }
 
 void player_debug(){
@@ -344,8 +361,8 @@ int main(int argc, char* argv[]) {
 
     SDL_Event event;
 
-    Wall* wall_data = loadWallData(wall_data);
-    Sector* sector_data = loadSectorData(sector_data);
+    wall_data = loadWallData(wall_data);
+    sector_data = loadSectorData(sector_data);
 
     float delta_time;
     while (!quit) {
@@ -401,7 +418,7 @@ int main(int argc, char* argv[]) {
                 // Update player_direction based on mouseX
                 player_direction += mouseX * look_speed;
                 // Update player_direction based on mouseX
-                player_y_direction += mouseY * look_speed;
+                player_z += mouseY * look_speed;
             }
         }
 
@@ -436,6 +453,14 @@ int main(int argc, char* argv[]) {
             for(int sec = 0; sec < numSectors; sec++){
                 sector_data[sec].distance = 0;
 
+                if(sector_data[sec].min_z > player_z){
+                    sector_data[sec].surface = 1; // bottom
+                } else if(sector_data[sec].max_z < player_z){
+                    sector_data[sec].surface = 2; // top
+                } else {
+                    sector_data[sec].surface = 0; //none
+                }
+
                 //sort walls inside sector
                 int walls_in_sector = ((sector_data[sec].max_wall_index - sector_data[sec].min_wall_index) + 1);
 
@@ -445,8 +470,6 @@ int main(int argc, char* argv[]) {
                     sector_walls[i] = wall_data[sector_data[sec].min_wall_index + i];
                     sector_walls[i].distance = distance(player_x, player_y, (sector_walls[i].x * 2 + sector_walls[i].length) / 2,
                                                                             (sector_walls[i].y * 2 + sector_walls[i].depth)  / 2);
-
-                    printf("%f %x\n", sector_walls[i].distance, sector_walls[i].color);
                 }
 
                 for(int i = 0; i < walls_in_sector - 1; i++){    
@@ -461,8 +484,8 @@ int main(int argc, char* argv[]) {
 
 
                 
-                for (int wall = 0; wall < walls_in_sector; wall++)
-                {
+                for (int wall = 0; wall < walls_in_sector / 2; wall++)
+                {   
                     float start_x = sector_walls[wall].x - player_x;
                     float start_y = sector_walls[wall].y - player_y;
                     float start_z = sector_data[sec].min_z - player_z;
@@ -471,8 +494,25 @@ int main(int argc, char* argv[]) {
                     float height = sector_data[sec].max_z;
                     
                     render_wall(start_x, start_y, start_z, 
-                                length,  depth,   height,  sector_walls[wall].color);
+                                length,  depth,   height,  sector_walls[wall].color, sec);
                     
+                    sector_data[sec].distance += sector_walls[wall].distance;
+                }
+
+                sector_data[sec].surface = -sector_data[sec].surface;
+
+                for (int wall = walls_in_sector / 2; wall < walls_in_sector; wall++)
+                {   
+                    float start_x = sector_walls[wall].x - player_x;
+                    float start_y = sector_walls[wall].y - player_y;
+                    float start_z = sector_data[sec].min_z - player_z;
+                    float length = sector_walls[wall].length;
+                    float depth = sector_walls[wall].depth;
+                    float height = sector_data[sec].max_z;
+                    
+                    render_wall(start_x, start_y, start_z, 
+                                length,  depth,   height,  sector_walls[wall].color, sec);
+
                     sector_data[sec].distance += sector_walls[wall].distance;
                 }
 
