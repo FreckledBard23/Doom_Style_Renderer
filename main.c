@@ -50,7 +50,8 @@ typedef struct
     Uint32 top_col;
     float distance;
     int surface;
-    int* surface_y;
+    int* surface_y1;
+    int* surface_y2;
 } Sector;
 
 Wall* wall_data;
@@ -123,7 +124,8 @@ Sector* loadSectorData(Sector* sectors) {
             break;
         }
 
-        sector.surface_y = malloc((screenx + 1) * sizeof(int));
+        sector.surface_y1 = malloc((screenx + 1) * sizeof(int));
+        sector.surface_y2 = malloc((screenx + 1) * sizeof(int));
 
         sectors[i] = sector;
     }
@@ -188,7 +190,9 @@ void draw_wall(int ll_x, int ll_y, int lr_x, int lr_y, int ul_y, int ur_y, Uint3
 
     float u_y = ul_y;
 
-    for (int i = 0; i <= steps; ++i) {
+    int min_y = SDL_min(ul_y, ur_y);
+
+    for (int i = 0; i < steps; ++i) {
         int ly = SDL_clamp(l_y, 0, screeny);
         int uy = SDL_clamp(u_y, 0, screeny);
 
@@ -207,17 +211,45 @@ void draw_wall(int ll_x, int ll_y, int lr_x, int lr_y, int ul_y, int ur_y, Uint3
             setPixel(color, x, j);
         }
 
-        if(sector_data[sector_num].surface == 1) {sector_data[sector_num].surface_y[x] = max;}
-        if(sector_data[sector_num].surface == 2) {sector_data[sector_num].surface_y[x] = min;}
-        if(sector_data[sector_num].surface == -1) 
-            {for(int q = sector_data[sector_num].surface_y[x]; q > max; q--) {setPixel(sector_data[sector_num].bottom_col, x, q);}}
-        if(sector_data[sector_num].surface == -2) 
-            {for(int q = min; q > sector_data[sector_num].surface_y[x]; q--) {setPixel(sector_data[sector_num].top_col, x, q);}}
+        if(sector_data[sector_num].surface == 1) {
+            if(sector_data[sector_num].surface_y1[x] < sector_data[sector_num].surface_y2[x]){
+                sector_data[sector_num].surface_y1[x] = max;
+            } else {
+                sector_data[sector_num].surface_y2[x] = max;
+            }
+        }
+        if(sector_data[sector_num].surface == 2) {
+            if(sector_data[sector_num].surface_y1[x] < sector_data[sector_num].surface_y2[x]){
+                sector_data[sector_num].surface_y1[x] = min;
+            } else {
+                sector_data[sector_num].surface_y2[x] = min;
+            }
+        }
 
         l_x += l_xIncrement;
         l_y += l_yIncrement;
 
         u_y += u_yIncrement;
+    }
+}
+
+void render_surface_y_vals(int sector_num){
+    for(int x = 0; x < screenx; x++){
+        int min = SDL_min(sector_data[sector_num].surface_y1[x], sector_data[sector_num].surface_y2[x]);
+        int max = SDL_max(sector_data[sector_num].surface_y1[x], sector_data[sector_num].surface_y2[x]);
+
+        if(min == -1 || max == -1){
+            continue;
+        }
+
+        for(int y = min; y < max; y++){
+            if(sector_data[sector_num].surface == 1){
+                setPixel(sector_data[sector_num].bottom_col, x, y);
+            }
+            if(sector_data[sector_num].surface == 2){
+                setPixel(sector_data[sector_num].top_col, x, y);
+            }
+        }
     }
 }
 
@@ -252,7 +284,7 @@ float prevent_zero(float a){
     }
 }
 
-float player_direction = 0;
+float player_direction = 0.1;
 float player_y_direction = 0;
 float player_x = 0;
 float player_y = -5;
@@ -261,7 +293,7 @@ float player_z = 0.5;
 bool w_key, s_key, a_key, d_key;
 
 float speed = 0.1;
-float look_speed = 0.005;
+float look_speed = 0.002 * PI;
 
 void player_movement(){
     if(w_key){
@@ -292,7 +324,7 @@ void player_movement(){
     player_y_direction = SDL_clamp(player_y_direction, -PI, PI);
 }
 
-void prevent_y_behind_player(float *x1,float *y1, float x2,float y2)
+void prevent_y_behind_player(float *x1, float *y1, float x2, float y2)
 {
     float y_distance = prevent_zero(y2 - *y1);
     float scale_factor = y2 / y_distance;
@@ -418,7 +450,7 @@ int main(int argc, char* argv[]) {
                 // Update player_direction based on mouseX
                 player_direction += mouseX * look_speed;
                 // Update player_direction based on mouseX
-                player_z += mouseY * look_speed;
+                //player_z += mouseY * look_speed;
             }
         }
 
@@ -461,6 +493,11 @@ int main(int argc, char* argv[]) {
                     sector_data[sec].surface = 0; //none
                 }
 
+                for(int i = 0; i < screenx - 1; i++){
+                    sector_data[sec].surface_y1[i] = -1; //null value
+                    sector_data[sec].surface_y2[i] = -1;
+                }
+
                 //sort walls inside sector
                 int walls_in_sector = ((sector_data[sec].max_wall_index - sector_data[sec].min_wall_index) + 1);
 
@@ -484,7 +521,7 @@ int main(int argc, char* argv[]) {
 
 
                 
-                for (int wall = 0; wall < walls_in_sector / 2; wall++)
+                for (int wall = 0; wall < walls_in_sector; wall++)
                 {   
                     float start_x = sector_walls[wall].x - player_x;
                     float start_y = sector_walls[wall].y - player_y;
@@ -499,22 +536,7 @@ int main(int argc, char* argv[]) {
                     sector_data[sec].distance += sector_walls[wall].distance;
                 }
 
-                sector_data[sec].surface = -sector_data[sec].surface;
-
-                for (int wall = walls_in_sector / 2; wall < walls_in_sector; wall++)
-                {   
-                    float start_x = sector_walls[wall].x - player_x;
-                    float start_y = sector_walls[wall].y - player_y;
-                    float start_z = sector_data[sec].min_z - player_z;
-                    float length = sector_walls[wall].length;
-                    float depth = sector_walls[wall].depth;
-                    float height = sector_data[sec].max_z;
-                    
-                    render_wall(start_x, start_y, start_z, 
-                                length,  depth,   height,  sector_walls[wall].color, sec);
-
-                    sector_data[sec].distance += sector_walls[wall].distance;
-                }
+                render_surface_y_vals(sec);
 
                 sector_data[sec].distance = sector_data[sec].distance / walls_in_sector;
             }
