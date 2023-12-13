@@ -22,8 +22,8 @@ void delay(float number_of_seconds)
         ;
 }
 
-#define screenx 1000
-#define screeny 800
+#define screenx 1080
+#define screeny 608
 
 //also backround
 #define null_color 0x00000000
@@ -167,7 +167,7 @@ void draw_line(int x1, int y1, int x2, int y2, uint32_t color) {
 }
 
 void setPixel(Uint32 color, int x, int y){
-    if(x > 0 && x < screenx && y > 0 && y < screeny){
+    if(x > 0 && x < screenx - 1 && y > 0 && y < screeny - 1){
         pixels[y * screenx + x] = color;
     }
 }
@@ -276,7 +276,12 @@ float distance(float x1, float y1, float x2, float y2){
     return sqrt(a * a + b * b);
 }
 
+//rendering stuff
+#define focal_plane_depth 1000
 #define fps 120
+
+//about based on focal_plane_depth
+#define FOV 0.5
 
 float prevent_zero(float a){
     if(a == 0){
@@ -337,9 +342,6 @@ void prevent_y_behind_player(float *x1, float *y1, float x2, float y2)
     *y1 = 2;
 }
 
-//rendering stuff
-#define focal_plane_depth 1000
-
 //takes in player relative coords, rotates them, and converts to screen coords. draw_wall renders this to the screen
 void render_wall(float lower_left_x, float lower_left_y, float lower_left_z, float x_length, float y_depth, float z_height, Uint32 color, int sector_num){
     float rotated_ll_x = lower_left_x * cos(player_direction) - lower_left_y * sin(player_direction);
@@ -387,6 +389,101 @@ void player_debug(){
     draw_box_filled(x, y, 0xFFFF0000, 10, 10);
     draw_line(x, y, x + (sin(player_direction) * 20), y + (cos(player_direction) * 20), 0xFFFF0000);
     draw_line(x, y, x + (cos(-player_direction) * 20), y + (sin(-player_direction) * 20), 0xFFFFFF00);
+}
+
+//the big function
+void render_all_sectors(){
+    //sort all sectors based on distance
+    for(int sec = 0; sec < numSectors - 1; sec++){    
+        for(int w = 0; w < numSectors - sec - 1; w++){
+            if(sector_data[w].distance < sector_data[w+1].distance){ 
+                Sector stec = sector_data[w]; 
+                sector_data[w] = sector_data[w+1];
+                sector_data[w+1] = stec; 
+            }
+        }
+    }
+
+
+    //loop through all sectors
+    for(int sec = 0; sec < numSectors; sec++){
+        sector_data[sec].distance = 0;
+
+        //determine if top/bottom surface needed
+        if(sector_data[sec].min_z > player_z){
+            sector_data[sec].surface = 1; // bottom
+        } else if(sector_data[sec].height < player_z){
+            sector_data[sec].surface = 2; // top
+        } else {
+            sector_data[sec].surface = 0; //none
+        }
+
+        //fill surface_y arrays with null values
+        for(int i = 0; i < screenx; i++){
+            sector_data[sec].surface_y1[i] = -1;
+            sector_data[sec].surface_y2[i] = -1;
+        }
+
+        //sort walls inside sector
+        int walls_in_sector = ((sector_data[sec].max_wall_index - sector_data[sec].min_wall_index) + 1);
+
+        //array for walls in current sector
+        Wall sector_walls[walls_in_sector];
+
+        //fill sector_walls and compute wall distances
+        for(int i = 0; i < walls_in_sector; i++){
+            sector_walls[i] = wall_data[sector_data[sec].min_wall_index + i];
+            sector_walls[i].distance = distance(player_x, player_y, (sector_walls[i].x * 2 + sector_walls[i].length) / 2,
+                                                                    (sector_walls[i].y * 2 + sector_walls[i].depth)  / 2);
+        }
+
+        //sort sector_walls
+        for(int i = 0; i < walls_in_sector - 1; i++){    
+            for(int w = 0; w < walls_in_sector - i - 1; w++){
+                if(sector_walls[w].distance < sector_walls[w+1].distance){ 
+                    Wall wa = sector_walls[w]; 
+                    sector_walls[w] = sector_walls[w+1];
+                    sector_walls[w+1] = wa; 
+                }
+            }
+        }
+
+        //draw sector_walls
+        for (int wall = 0; wall < walls_in_sector; wall++)
+        {   
+            float start_x = sector_walls[wall].x - player_x;
+            float start_y = sector_walls[wall].y - player_y;
+            float start_z = sector_data[sec].min_z - player_z;
+            float length = sector_walls[wall].length;
+            float depth = sector_walls[wall].depth;
+            float height = sector_data[sec].height;
+                    
+            render_wall(start_x, start_y, start_z, 
+                        length,  depth,   height,  sector_walls[wall].color, sec);
+
+            // add up all wall distances for the sector
+            sector_data[sec].distance += sector_walls[wall].distance;
+        }
+
+        //divide total wall distance by number of walls to get average for the sector
+        sector_data[sec].distance = sector_data[sec].distance / walls_in_sector;
+
+        //draw top and bottom surfaces
+        render_surface_y_vals(sec);
+    }
+}
+
+void draw_floor(){
+    for(int x = 0; x < screenx; x++){
+        for(int y = screeny / 2; y <= screeny; y++){
+            float dist = y - (screeny / 2);
+            int brightness = SDL_clamp(255 - (255 / dist * 10), 0, 255);
+
+            Uint32 color = brightness * 65536 + brightness * 256 + brightness;
+
+            setPixel(color, x, y);
+        }
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -482,89 +579,13 @@ int main(int argc, char* argv[]) {
         //ensure constant fps
         if(clock() % (1000 / fps) == 0){
             //----------Render code here----------//
-
             clear_screen(null_color);
             player_movement();
-
-            //sort all sectors based on distance
-            for(int sec = 0; sec < numSectors - 1; sec++){    
-                for(int w = 0; w < numSectors - sec - 1; w++){
-                    if(sector_data[w].distance < sector_data[w+1].distance){ 
-                        Sector stec = sector_data[w]; 
-                        sector_data[w] = sector_data[w+1];
-                        sector_data[w+1] = stec; 
-                    }
-                }
-            }
-
-
-            //loop through all sectors
-            for(int sec = 0; sec < numSectors; sec++){
-                sector_data[sec].distance = 0;
-
-                //determine if top/bottom surface needed
-                if(sector_data[sec].min_z > player_z){
-                    sector_data[sec].surface = 1; // bottom
-                } else if(sector_data[sec].height < player_z){
-                    sector_data[sec].surface = 2; // top
-                } else {
-                    sector_data[sec].surface = 0; //none
-                }
-
-                //fill surface_y arrays with null values
-                for(int i = 0; i < screenx - 1; i++){
-                    sector_data[sec].surface_y1[i] = -1;
-                    sector_data[sec].surface_y2[i] = -1;
-                }
-
-                //sort walls inside sector
-                int walls_in_sector = ((sector_data[sec].max_wall_index - sector_data[sec].min_wall_index) + 1);
-
-                //array for walls in current sector
-                Wall sector_walls[walls_in_sector];
-
-                //fill sector_walls and compute wall distances
-                for(int i = 0; i < walls_in_sector; i++){
-                    sector_walls[i] = wall_data[sector_data[sec].min_wall_index + i];
-                    sector_walls[i].distance = distance(player_x, player_y, (sector_walls[i].x * 2 + sector_walls[i].length) / 2,
-                                                                            (sector_walls[i].y * 2 + sector_walls[i].depth)  / 2);
-                }
-
-                //sort sector_walls
-                for(int i = 0; i < walls_in_sector - 1; i++){    
-                    for(int w = 0; w < walls_in_sector - i - 1; w++){
-                        if(sector_walls[w].distance < sector_walls[w+1].distance){ 
-                            Wall wa = sector_walls[w]; 
-                            sector_walls[w] = sector_walls[w+1];
-                            sector_walls[w+1] = wa; 
-                        }
-                    }
-                }
-
-                //draw sector_walls
-                for (int wall = 0; wall < walls_in_sector; wall++)
-                {   
-                    float start_x = sector_walls[wall].x - player_x;
-                    float start_y = sector_walls[wall].y - player_y;
-                    float start_z = sector_data[sec].min_z - player_z;
-                    float length = sector_walls[wall].length;
-                    float depth = sector_walls[wall].depth;
-                    float height = sector_data[sec].height;
-                    
-                    render_wall(start_x, start_y, start_z, 
-                                length,  depth,   height,  sector_walls[wall].color, sec);
-
-                     // add up all wall distances for the sector
-                    sector_data[sec].distance += sector_walls[wall].distance;
-                }
-
-                //divide total wall distance by number of walls to get average for the sector
-                sector_data[sec].distance = sector_data[sec].distance / walls_in_sector;
-
-                //draw top and bottom surfaces
-                render_surface_y_vals(sec);
-            }
+            
+            draw_floor();
+            render_all_sectors();
         }
+        
         // Update the screen
         SDL_RenderPresent(renderer);
 
